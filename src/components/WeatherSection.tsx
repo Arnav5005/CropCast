@@ -16,7 +16,7 @@ export const WeatherSection: React.FC<WeatherSectionProps> = ({ onProgress }) =>
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) return;
 
     let animationFrameId: number;
@@ -30,58 +30,59 @@ export const WeatherSection: React.FC<WeatherSectionProps> = ({ onProgress }) =>
     };
     window.addEventListener('resize', handleResize);
 
-    // Multi-layered Raindrops particle system
+    // Multi-Layered Motion-Blurred Raindrops System
     interface RainDrop {
       x: number;
       y: number;
       length: number;
       speed: number;
       alpha: number;
-      layer: number; // 0 = distant fine mist, 1 = mid, 2 = foreground heavy streak
+      layer: number; // 0 = background mist, 1 = midground, 2 = heavy foreground
       thickness: number;
     }
     const raindrops: RainDrop[] = [];
-    const rainCount = 450;
+    const rainCount = 550;
     for (let i = 0; i < rainCount; i++) {
-      const layer = Math.random() < 0.3 ? 0 : Math.random() < 0.7 ? 1 : 2;
+      const layer = Math.random() < 0.35 ? 0 : Math.random() < 0.75 ? 1 : 2;
       raindrops.push({
-        x: Math.random() * (width + 200) - 100,
+        x: Math.random() * (width + 300) - 150,
         y: Math.random() * height,
-        length: layer === 0 ? 12 : layer === 1 ? 25 : 45,
-        speed: layer === 0 ? 14 : layer === 1 ? 24 : 36,
-        alpha: layer === 0 ? 0.25 : layer === 1 ? 0.5 : 0.85,
-        thickness: layer === 0 ? 0.8 : layer === 1 ? 1.5 : 2.2,
+        length: layer === 0 ? 16 : layer === 1 ? 32 : 55,
+        speed: layer === 0 ? 18 : layer === 1 ? 28 : 42,
+        alpha: layer === 0 ? 0.3 : layer === 1 ? 0.6 : 0.9,
+        thickness: layer === 0 ? 0.9 : layer === 1 ? 1.6 : 2.4,
         layer,
       });
     }
 
-    // Cloud volumetric clusters
-    interface CloudBlob {
+    // Volumetric Cloud Cells
+    interface CloudCell {
       x: number;
       y: number;
       rx: number;
       ry: number;
       speed: number;
       density: number;
+      darkness: number;
     }
-    const clouds: CloudBlob[] = [];
-    for (let i = 0; i < 22; i++) {
+    const clouds: CloudCell[] = [];
+    for (let i = 0; i < 26; i++) {
       clouds.push({
-        x: (Math.random() * width * 1.5) - width * 0.25,
-        y: Math.random() * height * 0.55,
-        rx: Math.random() * 220 + 140,
-        ry: Math.random() * 110 + 60,
-        speed: Math.random() * 0.4 + 0.15,
-        density: Math.random() * 0.4 + 0.5,
+        x: Math.random() * width * 1.6 - width * 0.3,
+        y: Math.random() * height * 0.6,
+        rx: Math.random() * 260 + 160,
+        ry: Math.random() * 130 + 70,
+        speed: Math.random() * 0.35 + 0.1,
+        density: Math.random() * 0.35 + 0.65,
+        darkness: Math.random() * 0.4 + 0.6,
       });
     }
 
     // State object scrubbed by GSAP
     const weatherState = {
       progress: 0,
-      cloudDensity: 0.8,
       rainIntensity: 0,
-      cameraY: 0, // descends from sky to field
+      cameraY: 0,
       fieldReveal: 0,
       lightningFlash: 0,
       soilTransition: 0,
@@ -95,16 +96,15 @@ export const WeatherSection: React.FC<WeatherSectionProps> = ({ onProgress }) =>
       let cx = startX;
       let cy = startY;
 
-      while (cy < height * 0.7) {
-        const ny = cy + Math.random() * 35 + 20;
-        const nx = cx + (Math.random() - 0.5) * 60;
-        branches.push({ x1: cx, y1: cy, x2: nx, y2: ny, w: Math.random() * 2.5 + 1.5 });
+      while (cy < height * 0.75) {
+        const ny = cy + Math.random() * 38 + 22;
+        const nx = cx + (Math.random() - 0.5) * 70;
+        branches.push({ x1: cx, y1: cy, x2: nx, y2: ny, w: Math.random() * 3 + 2 });
 
-        // Occasional sub branch
-        if (Math.random() < 0.45) {
-          const subX = nx + (Math.random() - 0.5) * 80;
-          const subY = ny + Math.random() * 40 + 15;
-          branches.push({ x1: nx, y1: ny, x2: subX, y2: subY, w: 1 });
+        if (Math.random() < 0.5) {
+          const subX = nx + (Math.random() - 0.5) * 90;
+          const subY = ny + Math.random() * 45 + 20;
+          branches.push({ x1: nx, y1: ny, x2: subX, y2: subY, w: 1.2 });
         }
         cx = nx;
         cy = ny;
@@ -114,56 +114,51 @@ export const WeatherSection: React.FC<WeatherSectionProps> = ({ onProgress }) =>
 
     const render = () => {
       tick++;
-      ctx.clearRect(0, 0, width, height);
-
       const p = weatherState.progress;
 
-      // Occasional natural lightning event (between 30% and 75% scroll)
-      if (p > 0.28 && p < 0.75) {
-        if (tick % 190 === 0 && Math.random() < 0.7) {
+      // Realistic Lightning Flash Events (between 25% and 75% scroll)
+      if (p > 0.25 && p < 0.75) {
+        if (tick % 210 === 0 && Math.random() < 0.75) {
           weatherState.lightningFlash = 1;
           lightningBranches = generateLightning(width * 0.5 + (Math.random() - 0.5) * width * 0.6, 20);
         }
       }
 
-      // Decay lightning flash
       if (weatherState.lightningFlash > 0) {
-        weatherState.lightningFlash = Math.max(0, weatherState.lightningFlash - 0.08);
+        weatherState.lightningFlash = Math.max(0, weatherState.lightningFlash - 0.07);
       }
 
       const flash = weatherState.lightningFlash;
 
-      // 1. Storm Sky Gradient
+      // 1. Dark Atmospheric Storm Sky
       const skyGrad = ctx.createLinearGradient(0, 0, 0, height);
       if (flash > 0.1) {
-        // Lightning illumination
-        skyGrad.addColorStop(0, `rgba(186, 210, 245, ${0.4 + flash * 0.6})`);
-        skyGrad.addColorStop(0.5, `rgba(90, 115, 150, ${0.3 + flash * 0.5})`);
-        skyGrad.addColorStop(1, `rgba(20, 35, 55, ${0.2 + flash * 0.4})`);
+        skyGrad.addColorStop(0, `rgba(215, 230, 255, ${0.45 + flash * 0.55})`);
+        skyGrad.addColorStop(0.5, `rgba(110, 135, 175, ${0.35 + flash * 0.45})`);
+        skyGrad.addColorStop(1, `rgba(30, 48, 75, ${0.25 + flash * 0.35})`);
       } else {
-        // Dark storm sky
-        skyGrad.addColorStop(0, '#0a1018');
-        skyGrad.addColorStop(0.4, '#141d2b');
-        skyGrad.addColorStop(0.8, '#1e293b');
-        skyGrad.addColorStop(1, '#0f172a');
+        skyGrad.addColorStop(0, '#060a10');
+        skyGrad.addColorStop(0.35, '#0e1624');
+        skyGrad.addColorStop(0.75, '#182438');
+        skyGrad.addColorStop(1, '#0c1420');
       }
       ctx.fillStyle = skyGrad;
       ctx.fillRect(0, 0, width, height);
 
       // 2. Volumetric Storm Clouds
       for (let c of clouds) {
-        c.x = (c.x + c.speed + width * 1.5) % (width * 1.5) - width * 0.25;
-        const cloudY = c.y - weatherState.cameraY * 0.6;
+        c.x = (c.x + c.speed + width * 1.6) % (width * 1.6) - width * 0.3;
+        const cloudY = c.y - weatherState.cameraY * 0.65;
 
-        const cGrad = ctx.createRadialGradient(c.x, cloudY, 10, c.x, cloudY, c.rx);
+        const cGrad = ctx.createRadialGradient(c.x, cloudY, 15, c.x, cloudY, c.rx);
         if (flash > 0.2) {
-          cGrad.addColorStop(0, `rgba(220, 235, 255, ${c.density * (0.6 + flash * 0.4)})`);
-          cGrad.addColorStop(0.6, `rgba(130, 155, 185, ${c.density * 0.5})`);
+          cGrad.addColorStop(0, `rgba(235, 245, 255, ${c.density * (0.65 + flash * 0.35)})`);
+          cGrad.addColorStop(0.6, `rgba(145, 170, 205, ${c.density * 0.5})`);
           cGrad.addColorStop(1, 'rgba(30, 45, 65, 0)');
         } else {
-          cGrad.addColorStop(0, `rgba(55, 65, 81, ${c.density * 0.85})`);
-          cGrad.addColorStop(0.5, `rgba(30, 41, 59, ${c.density * 0.7})`);
-          cGrad.addColorStop(1, 'rgba(15, 23, 42, 0)');
+          cGrad.addColorStop(0, `rgba(45, 55, 72, ${c.density * 0.9})`);
+          cGrad.addColorStop(0.5, `rgba(24, 32, 47, ${c.density * 0.75})`);
+          cGrad.addColorStop(1, 'rgba(10, 16, 26, 0)');
         }
         ctx.fillStyle = cGrad;
         ctx.beginPath();
@@ -171,15 +166,15 @@ export const WeatherSection: React.FC<WeatherSectionProps> = ({ onProgress }) =>
         ctx.fill();
       }
 
-      // 3. Lightning Branch Strokes
+      // 3. Lightning Channels & Atmospheric Glow
       if (flash > 0.05 && lightningBranches.length > 0) {
         ctx.save();
         ctx.strokeStyle = `rgba(255, 255, 255, ${flash})`;
-        ctx.shadowColor = '#60a5fa';
-        ctx.shadowBlur = 20 * flash;
+        ctx.shadowColor = '#93c5fd';
+        ctx.shadowBlur = 25 * flash;
 
         for (let b of lightningBranches) {
-          ctx.lineWidth = b.w * flash * 1.5;
+          ctx.lineWidth = b.w * flash * 1.6;
           ctx.beginPath();
           ctx.moveTo(b.x1, b.y1 - weatherState.cameraY * 0.5);
           ctx.lineTo(b.x2, b.y2 - weatherState.cameraY * 0.5);
@@ -188,22 +183,20 @@ export const WeatherSection: React.FC<WeatherSectionProps> = ({ onProgress }) =>
         ctx.restore();
       }
 
-      // 4. Agricultural Field Reveal Below (Green Rice Fields & Terraces)
+      // 4. Agricultural Landscape Reveal (Lush Rain-Drenched Terraces)
       if (weatherState.fieldReveal > 0.02) {
         ctx.save();
-        const fieldY = height * 0.45 - (weatherState.cameraY - height * 0.3) * 0.9;
-        const fieldHeight = height * 1.2;
+        const fieldY = height * 0.42 - (weatherState.cameraY - height * 0.3) * 0.95;
+        const fieldHeight = height * 1.3;
 
-        // Base field gradient with wet sheen
         const fieldGrad = ctx.createLinearGradient(0, fieldY, 0, fieldY + fieldHeight);
-        fieldGrad.addColorStop(0, flash > 0.2 ? '#2d6a4f' : '#143621');
-        fieldGrad.addColorStop(0.4, flash > 0.2 ? '#40916c' : '#1b4332');
-        fieldGrad.addColorStop(0.8, flash > 0.2 ? '#52b788' : '#2d6a4f');
-        fieldGrad.addColorStop(1, '#081c15');
+        fieldGrad.addColorStop(0, flash > 0.2 ? '#2d6a4f' : '#0f2918');
+        fieldGrad.addColorStop(0.35, flash > 0.2 ? '#40916c' : '#143d24');
+        fieldGrad.addColorStop(0.7, flash > 0.2 ? '#52b788' : '#1b5230');
+        fieldGrad.addColorStop(1, '#07170c');
 
         ctx.fillStyle = fieldGrad;
         ctx.beginPath();
-        // Perspective horizon line
         ctx.moveTo(0, fieldY);
         ctx.lineTo(width, fieldY);
         ctx.lineTo(width, height);
@@ -211,68 +204,67 @@ export const WeatherSection: React.FC<WeatherSectionProps> = ({ onProgress }) =>
         ctx.closePath();
         ctx.fill();
 
-        // Field Plots / Paddy Bunds / Terrace Curves
-        ctx.strokeStyle = flash > 0.2 ? 'rgba(74, 222, 128, 0.4)' : 'rgba(16, 185, 129, 0.25)';
-        ctx.lineWidth = 2;
+        // Field Terraces & Contour Bunds
+        ctx.strokeStyle = flash > 0.2 ? 'rgba(134, 239, 172, 0.45)' : 'rgba(34, 197, 94, 0.22)';
+        ctx.lineWidth = 2.2;
 
-        const numRows = 16;
+        const numRows = 18;
         for (let r = 0; r < numRows; r++) {
           const rowProgress = r / numRows;
-          const y = fieldY + Math.pow(rowProgress, 1.6) * (height - fieldY + 200);
-          const curveDepth = Math.sin(rowProgress * Math.PI) * 40;
+          const y = fieldY + Math.pow(rowProgress, 1.65) * (height - fieldY + 220);
+          const curveDepth = Math.sin(rowProgress * Math.PI) * 45;
 
           ctx.beginPath();
           ctx.moveTo(-50, y);
           ctx.bezierCurveTo(
-            width * 0.3,
+            width * 0.32,
             y + curveDepth,
-            width * 0.7,
-            y - curveDepth * 0.5,
+            width * 0.68,
+            y - curveDepth * 0.6,
             width + 50,
-            y + curveDepth * 0.8
+            y + curveDepth * 0.75
           );
           ctx.stroke();
 
-          // Paddy Crop Tufts along rows (dense green vegetation)
-          if (y > height * 0.4 && y < height + 80) {
-            const tuftCount = Math.floor(width / (40 - rowProgress * 25));
-            const tuftHeight = (8 + rowProgress * 32) * (1 + p * 0.4);
+          // Dense Rice Crop Tufts along terrace rows
+          if (y > height * 0.38 && y < height + 90) {
+            const tuftCount = Math.floor(width / (38 - rowProgress * 24));
+            const tuftHeight = (10 + rowProgress * 36) * (1 + p * 0.35);
 
             for (let t = 0; t < tuftCount; t++) {
-              const tx = (t / tuftCount) * width + ((r % 2) * 15);
+              const tx = (t / tuftCount) * width + ((r % 2) * 16);
               const plantColor = flash > 0.3 ? '#86efac' : '#22c55e';
 
               ctx.strokeStyle = plantColor;
-              ctx.lineWidth = 1.2 + rowProgress * 1.5;
+              ctx.lineWidth = 1.3 + rowProgress * 1.6;
 
-              // 3-blade rice sprout tuft
               ctx.beginPath();
               ctx.moveTo(tx, y);
-              ctx.lineTo(tx - 4, y - tuftHeight);
+              ctx.lineTo(tx - 5, y - tuftHeight * 0.85);
               ctx.moveTo(tx, y);
-              ctx.lineTo(tx + (Math.sin(tick * 0.05 + t) * 3), y - tuftHeight * 1.15);
+              ctx.lineTo(tx + Math.sin(tick * 0.05 + t) * 4, y - tuftHeight);
               ctx.moveTo(tx, y);
-              ctx.lineTo(tx + 5, y - tuftHeight * 0.9);
+              ctx.lineTo(tx + 6, y - tuftHeight * 0.9);
               ctx.stroke();
             }
           }
         }
 
-        // Wet Water Reflection on Ground
-        const wetGrad = ctx.createLinearGradient(0, height * 0.6, 0, height);
-        wetGrad.addColorStop(0, 'rgba(56, 189, 248, 0.08)');
-        wetGrad.addColorStop(0.5, 'rgba(16, 185, 129, 0.15)');
-        wetGrad.addColorStop(1, 'rgba(6, 78, 59, 0.3)');
+        // Wet Standing Water Sheen Reflecting Rain
+        const wetGrad = ctx.createLinearGradient(0, height * 0.55, 0, height);
+        wetGrad.addColorStop(0, 'rgba(56, 189, 248, 0.09)');
+        wetGrad.addColorStop(0.5, 'rgba(16, 185, 129, 0.16)');
+        wetGrad.addColorStop(1, 'rgba(4, 47, 46, 0.35)');
         ctx.fillStyle = wetGrad;
-        ctx.fillRect(0, height * 0.6, width, height * 0.4);
+        ctx.fillRect(0, height * 0.55, width, height * 0.45);
 
         ctx.restore();
       }
 
-      // 5. Realistic Falling Rain Simulation
+      // 5. Realistic Falling Rain Simulation with Depth & Slant
       if (weatherState.rainIntensity > 0.05) {
         ctx.save();
-        const windSlant = 6; // wind-driven slant angle
+        const windSlant = 7;
 
         for (let r of raindrops) {
           r.y += r.speed;
@@ -280,11 +272,11 @@ export const WeatherSection: React.FC<WeatherSectionProps> = ({ onProgress }) =>
 
           if (r.y > height + 50) {
             r.y = -50;
-            r.x = Math.random() * (width + 200) - 100;
+            r.x = Math.random() * (width + 300) - 150;
           }
 
           const currentAlpha = r.alpha * weatherState.rainIntensity * (flash > 0.2 ? 1.4 : 1);
-          ctx.strokeStyle = `rgba(200, 225, 255, ${Math.min(1, currentAlpha)})`;
+          ctx.strokeStyle = `rgba(215, 235, 255, ${Math.min(1, currentAlpha)})`;
           ctx.lineWidth = r.thickness;
           ctx.lineCap = 'round';
 
@@ -293,25 +285,25 @@ export const WeatherSection: React.FC<WeatherSectionProps> = ({ onProgress }) =>
           ctx.lineTo(r.x - windSlant * (r.length / 15), r.y - r.length);
           ctx.stroke();
 
-          // Rain splash ripple on ground
-          if (r.y > height * 0.75 && Math.random() < 0.2) {
-            ctx.strokeStyle = `rgba(255, 255, 255, ${currentAlpha * 0.4})`;
+          // Droplet Splash Rings on Water/Soil
+          if (r.y > height * 0.72 && Math.random() < 0.25) {
+            ctx.strokeStyle = `rgba(255, 255, 255, ${currentAlpha * 0.45})`;
             ctx.lineWidth = 1;
             ctx.beginPath();
-            ctx.ellipse(r.x, r.y, 6, 2, 0, 0, Math.PI * 2);
+            ctx.ellipse(r.x, r.y, 7, 2.5, 0, 0, Math.PI * 2);
             ctx.stroke();
           }
         }
         ctx.restore();
       }
 
-      // 6. Underground Transition Overlay (Descending to Soil)
+      // 6. Underground Transition to Soil
       if (weatherState.soilTransition > 0.01) {
         const soilAlpha = weatherState.soilTransition;
         const soilGrad = ctx.createLinearGradient(0, height * (1 - soilAlpha), 0, height);
         soilGrad.addColorStop(0, 'rgba(41, 24, 14, 0)');
-        soilGrad.addColorStop(0.3, `rgba(56, 32, 18, ${soilAlpha * 0.8})`);
-        soilGrad.addColorStop(1, `rgba(28, 16, 9, ${soilAlpha})`);
+        soilGrad.addColorStop(0.35, `rgba(56, 32, 18, ${soilAlpha * 0.85})`);
+        soilGrad.addColorStop(1, `rgba(24, 14, 8, ${soilAlpha})`);
         ctx.fillStyle = soilGrad;
         ctx.fillRect(0, 0, width, height);
       }
@@ -332,12 +324,6 @@ export const WeatherSection: React.FC<WeatherSectionProps> = ({ onProgress }) =>
         const p = self.progress;
         weatherState.progress = p;
         if (onProgress) onProgress(p);
-
-        // Sequence:
-        // 0.00 - 0.25: Atmospheric entry & dark storm clouds condensing
-        // 0.25 - 0.55: Heavy precipitation onset, lightning events
-        // 0.55 - 0.80: Camera breaks through clouds, reveals lush green paddy landscape drenched in rain
-        // 0.80 - 1.00: Camera zooms into a specific field patch and dips down toward soil
 
         if (p < 0.25) {
           const sub = p / 0.25;
@@ -365,7 +351,6 @@ export const WeatherSection: React.FC<WeatherSectionProps> = ({ onProgress }) =>
           weatherState.soilTransition = sub;
         }
 
-        // Minimal Label Opacity
         if (labelRef.current) {
           if (p < 0.12) {
             labelRef.current.style.opacity = '0';
@@ -390,18 +375,17 @@ export const WeatherSection: React.FC<WeatherSectionProps> = ({ onProgress }) =>
   return (
     <section
       ref={containerRef}
-      className="relative w-full h-screen overflow-hidden bg-[#0a1018] select-none"
+      className="relative w-full h-screen overflow-hidden bg-[#060a10] select-none"
     >
       <canvas ref={canvasRef} className="absolute inset-0 w-full h-full block" />
 
-      {/* Minimalistic Atmospheric Overlay */}
+      {/* Atmospheric Overlay */}
       <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-8 md:p-16 z-10">
         <div className="flex justify-between items-center text-xs tracking-[0.3em] font-mono text-cyan-400/70 uppercase">
           <span>STAGE 03 // HYDRO-METEOROLOGY</span>
           <span>PRECIPITATION: 842 MM // DENSE CLOUD CEILING</span>
         </div>
 
-        {/* Minimal Text Label */}
         <div
           ref={labelRef}
           className="flex flex-col items-center justify-center text-center space-y-2 my-auto opacity-0 transition-opacity duration-300"

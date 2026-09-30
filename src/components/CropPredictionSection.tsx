@@ -90,7 +90,6 @@ export const CropPredictionSection: React.FC<CropPredictionSectionProps> = ({
     setSoilPH(d.soilPH);
     setHistoricalYield(d.historicalYield);
 
-    // Auto-recalculate
     recalculatePrediction(
       d.defaultNDVI,
       d.rainfall,
@@ -108,7 +107,6 @@ export const CropPredictionSection: React.FC<CropPredictionSectionProps> = ({
   ) => {
     setIsPredicting(true);
     setTimeout(() => {
-      // Dynamic yield model based on NDVI vigour, moisture, and historical baseline
       const ndviFactor = (cNDVI - 0.5) * 1.8;
       const moistureFactor = (cMoist - 50) * 0.015;
       const rainFactor = (cRain - 700) * 0.0006;
@@ -118,7 +116,7 @@ export const CropPredictionSection: React.FC<CropPredictionSectionProps> = ({
       );
       const delta = +(rawYield - cHist).toFixed(2);
       const deltaPercent = +((delta / cHist) * 100).toFixed(1);
-      const confidence = +(92 + (cNDVI * 6)).toFixed(1);
+      const confidence = +(92 + cNDVI * 6).toFixed(1);
       const healthScore = Math.min(99, Math.round(cNDVI * 115));
 
       setPredictionResult({
@@ -131,7 +129,7 @@ export const CropPredictionSection: React.FC<CropPredictionSectionProps> = ({
         biomassIndex: +(cNDVI * 120).toFixed(1),
       });
       setIsPredicting(false);
-    }, 450);
+    }, 350);
   };
 
   const handlePredictSubmit = (e: React.FormEvent) => {
@@ -139,11 +137,11 @@ export const CropPredictionSection: React.FC<CropPredictionSectionProps> = ({
     recalculatePrediction(ndvi, rainfall, soilMoisture, historicalYield);
   };
 
-  // Canvas Golden Paddy Wind Simulation & Transition
+  // Canvas Golden Paddy Wind Simulation & Hardware Accelerated Transition
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) return;
 
     let animationFrameId: number;
@@ -165,28 +163,28 @@ export const CropPredictionSection: React.FC<CropPredictionSectionProps> = ({
       phase: number;
       width: number;
       grainCount: number;
-      maturity: number; // 0 = green, 1 = golden ripe
+      droopDirection: number;
     }
 
     const stalks: PaddyStalk[] = [];
-    const numRows = 22;
+    const numRows = 24;
     for (let r = 0; r < numRows; r++) {
       const rowProg = r / numRows;
-      const y = height * 0.35 + Math.pow(rowProg, 1.7) * (height * 0.65 + 100);
+      const y = height * 0.32 + Math.pow(rowProg, 1.7) * (height * 0.68 + 120);
       const rowScale = 0.35 + rowProg * 0.75;
-      const spacing = 18 * rowScale;
-      const count = Math.floor(width / spacing) + 4;
+      const spacing = 16 * rowScale;
+      const count = Math.floor(width / spacing) + 6;
 
       for (let c = 0; c < count; c++) {
         const x = c * spacing + (r % 2) * (spacing * 0.5) - 30;
         stalks.push({
           x,
           baseY: y,
-          length: (55 + Math.random() * 25) * rowScale,
-          phase: x * 0.008 + r * 0.4,
-          width: 1.8 * rowScale,
-          grainCount: Math.floor(Math.random() * 4 + 5),
-          maturity: 0,
+          length: (58 + Math.random() * 28) * rowScale,
+          phase: x * 0.007 + r * 0.35,
+          width: 2.0 * rowScale,
+          grainCount: Math.floor(Math.random() * 4 + 6),
+          droopDirection: Math.random() > 0.4 ? 1 : -1,
         });
       }
     }
@@ -194,7 +192,7 @@ export const CropPredictionSection: React.FC<CropPredictionSectionProps> = ({
     // Scrubbed state
     const cropState = {
       progress: 0,
-      maturity: 0, // 0 (green) to 1 (golden)
+      maturity: 0,
       windStrength: 1,
       cameraElevation: 0,
       uiReveal: 0,
@@ -204,82 +202,74 @@ export const CropPredictionSection: React.FC<CropPredictionSectionProps> = ({
 
     const render = () => {
       tick++;
-      ctx.clearRect(0, 0, width, height);
-
       const mat = cropState.maturity;
 
       // 1. Sky / Sunset Ambient Gradient
       const skyGrad = ctx.createLinearGradient(0, 0, 0, height * 0.6);
-      // Sky warms up from agricultural green-blue to golden harvest glow
-      const skyColor1 = `rgb(${Math.round(15 + mat * 45)}, ${Math.round(26 - mat * 5)}, ${Math.round(38 - mat * 20)})`;
-      const skyColor2 = `rgb(${Math.round(25 + mat * 80)}, ${Math.round(45 + mat * 35)}, ${Math.round(40 - mat * 20)})`;
+      const skyColor1 = `rgb(${Math.round(15 + mat * 50)}, ${Math.round(26 - mat * 5)}, ${Math.round(38 - mat * 22)})`;
+      const skyColor2 = `rgb(${Math.round(25 + mat * 85)}, ${Math.round(45 + mat * 40)}, ${Math.round(40 - mat * 22)})`;
       skyGrad.addColorStop(0, skyColor1);
       skyGrad.addColorStop(0.5, skyColor2);
-      skyGrad.addColorStop(1, `rgba(${Math.round(180 * mat + 20)}, ${Math.round(140 * mat + 60)}, 20, ${0.4 + mat * 0.4})`);
+      skyGrad.addColorStop(1, `rgba(${Math.round(195 * mat + 20)}, ${Math.round(155 * mat + 60)}, 20, ${0.45 + mat * 0.45})`);
 
       ctx.fillStyle = skyGrad;
       ctx.fillRect(0, 0, width, height);
 
-      // Golden Sun Orb on horizon during golden stage
-      if (mat > 0.1) {
+      // Golden Sun Orb
+      if (mat > 0.08) {
         const sunGrad = ctx.createRadialGradient(
           width * 0.75,
-          height * 0.35,
-          20,
+          height * 0.32,
+          25,
           width * 0.75,
-          height * 0.35,
-          280
+          height * 0.32,
+          320
         );
-        sunGrad.addColorStop(0, `rgba(253, 230, 138, ${mat * 0.8})`);
-        sunGrad.addColorStop(0.4, `rgba(245, 158, 11, ${mat * 0.4})`);
+        sunGrad.addColorStop(0, `rgba(254, 240, 138, ${mat * 0.85})`);
+        sunGrad.addColorStop(0.35, `rgba(245, 158, 11, ${mat * 0.45})`);
         sunGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
         ctx.fillStyle = sunGrad;
         ctx.fillRect(0, 0, width, height * 0.6);
       }
 
       // 2. Field Floor Base Gradient
-      const fieldGrad = ctx.createLinearGradient(0, height * 0.35, 0, height);
+      const fieldGrad = ctx.createLinearGradient(0, height * 0.32, 0, height);
       if (mat > 0.5) {
-        // Golden ripe field floor
         fieldGrad.addColorStop(0, '#583c0f');
-        fieldGrad.addColorStop(0.4, '#784e12');
-        fieldGrad.addColorStop(0.8, '#926017');
+        fieldGrad.addColorStop(0.35, '#784e12');
+        fieldGrad.addColorStop(0.75, '#926017');
         fieldGrad.addColorStop(1, '#3b2505');
       } else {
-        // Green lush field floor
         fieldGrad.addColorStop(0, '#14532d');
-        fieldGrad.addColorStop(0.5, '#166534');
+        fieldGrad.addColorStop(0.35, '#166534');
         fieldGrad.addColorStop(1, '#0f3d1f');
       }
       ctx.fillStyle = fieldGrad;
-      ctx.fillRect(0, height * 0.35, width, height * 0.65);
+      ctx.fillRect(0, height * 0.32, width, height * 0.68);
 
-      // 3. Realistic Wind Wave Equation
-      const windSpeed = 0.045;
-      const windWaveFreq = 0.006;
+      // 3. Realistic Wind Wave Equations
+      const windSpeed = 0.048;
+      const windWaveFreq = 0.0055;
 
       // 4. Render Golden / Green Paddy Rice Stalks with Panicles
       for (let s of stalks) {
-        // Wind wave sway displacement
         const wave = Math.sin(s.x * windWaveFreq - tick * windSpeed + s.phase);
-        const gust = Math.cos(s.x * 0.003 - tick * 0.02) * 0.5 + 0.5;
-        const swayAngle = (wave * 0.28 + gust * 0.15) * cropState.windStrength;
+        const gust = Math.cos(s.x * 0.0028 - tick * 0.022) * 0.5 + 0.5;
+        const swayAngle = (wave * 0.32 + gust * 0.18) * cropState.windStrength;
 
         const startX = s.x;
-        const startY = s.baseY + cropState.cameraElevation * 40;
+        const startY = s.baseY + cropState.cameraElevation * 45;
 
-        // Tip coordinates under wind bend
         const tipX = startX + Math.sin(swayAngle) * s.length;
         const tipY = startY - Math.cos(swayAngle) * s.length;
 
-        // Control point for natural curved stem bending
         const cpX = startX + Math.sin(swayAngle * 0.6) * (s.length * 0.5);
         const cpY = startY - Math.cos(swayAngle * 0.6) * (s.length * 0.5);
 
-        // Stalk Color blending from Green to Golden Amber
-        const rVal = Math.round(34 + mat * 200);
-        const gVal = Math.round(197 - mat * 45);
-        const bVal = Math.round(94 - mat * 80);
+        // Blending Green to Golden Amber
+        const rVal = Math.round(34 + mat * 205);
+        const gVal = Math.round(197 - mat * 42);
+        const bVal = Math.round(94 - mat * 82);
 
         ctx.strokeStyle = `rgb(${rVal}, ${gVal}, ${bVal})`;
         ctx.lineWidth = s.width;
@@ -290,55 +280,52 @@ export const CropPredictionSection: React.FC<CropPredictionSectionProps> = ({
         ctx.quadraticCurveTo(cpX, cpY, tipX, tipY);
         ctx.stroke();
 
-        // Heavy Rice Panicle (Golden Grain Head Droop)
-        if (mat > 0.2) {
-          const panicleMat = (mat - 0.2) / 0.8;
+        // Golden Rice Panicle (Heavy Grain Head)
+        if (mat > 0.15) {
+          const panicleMat = (mat - 0.15) / 0.85;
           ctx.save();
           ctx.translate(tipX, tipY);
 
-          // Panicle droops further under grain weight
-          const droopAngle = swayAngle + 0.45 * panicleMat;
+          const droopAngle = swayAngle + 0.52 * panicleMat * s.droopDirection;
           ctx.rotate(droopAngle);
 
-          // Grain Head
-          const panLen = s.length * 0.45 * panicleMat;
+          const panLen = s.length * 0.48 * panicleMat;
           ctx.strokeStyle = `rgb(${Math.round(234 + panicleMat * 20)}, ${Math.round(179 - panicleMat * 25)}, 8)`;
-          ctx.lineWidth = s.width * 1.6;
+          ctx.lineWidth = s.width * 1.7;
 
           ctx.beginPath();
           ctx.moveTo(0, 0);
-          ctx.quadraticCurveTo(8, panLen * 0.5, 4, panLen);
+          ctx.quadraticCurveTo(8 * s.droopDirection, panLen * 0.5, 4 * s.droopDirection, panLen);
           ctx.stroke();
 
-          // Individual Golden Rice Grains along panicle
+          // Individual Rice Grains
           ctx.fillStyle = '#fef08a';
           for (let g = 1; g <= s.grainCount; g++) {
             const gy = (panLen / (s.grainCount + 1)) * g;
-            const gx = (g % 2 === 0 ? 3 : -3) * (1 + panicleMat);
+            const gx = (g % 2 === 0 ? 3.5 : -3.5) * (1 + panicleMat);
             ctx.beginPath();
-            ctx.ellipse(gx, gy, 2.5 * s.width, 1.2 * s.width, Math.PI * 0.25, 0, Math.PI * 2);
+            ctx.ellipse(gx, gy, 2.6 * s.width, 1.3 * s.width, Math.PI * 0.25, 0, Math.PI * 2);
             ctx.fill();
           }
-
           ctx.restore();
         }
       }
 
-      // 5. Ambient Atmospheric Dust / Pollen Motes in Golden Sunlight
-      if (mat > 0.3) {
-        ctx.fillStyle = 'rgba(254, 240, 138, 0.4)';
-        for (let i = 0; i < 40; i++) {
-          const mx = (Math.sin(tick * 0.02 + i) * width * 0.5 + width * 0.5 + i * 25) % width;
-          const my = (height * 0.3 + (i * 37 + tick * 0.6) % (height * 0.6));
+      // 5. Ambient Atmospheric Dust / Golden Motes
+      if (mat > 0.25) {
+        ctx.fillStyle = 'rgba(254, 240, 138, 0.45)';
+        for (let i = 0; i < 45; i++) {
+          const mx = (Math.sin(tick * 0.02 + i) * width * 0.5 + width * 0.5 + i * 28) % width;
+          const my = height * 0.28 + ((i * 35 + tick * 0.65) % (height * 0.65));
           ctx.beginPath();
-          ctx.arc(mx, my, 1.5, 0, Math.PI * 2);
+          ctx.arc(mx, my, 1.6, 0, Math.PI * 2);
           ctx.fill();
         }
       }
 
-      // 6. UI Dark Backdrop Dimming as Interface slides in
-      if (cropState.uiReveal > 0.1) {
-        const uiDarkness = cropState.uiReveal * 0.85;
+      // 6. Smooth UI Backdrop Darkening
+      if (cropState.uiReveal > 0.05) {
+        const uiDarkness = cropState.uiReveal * 0.88;
         ctx.fillStyle = `rgba(5, 7, 10, ${uiDarkness})`;
         ctx.fillRect(0, 0, width, height);
       }
@@ -354,47 +341,42 @@ export const CropPredictionSection: React.FC<CropPredictionSectionProps> = ({
       start: 'top top',
       end: '+=240%',
       pin: true,
-      scrub: 1.2,
+      scrub: 1.0, // Snappier and smoother scrub
       onUpdate: (self) => {
         const p = self.progress;
         cropState.progress = p;
         if (onProgress) onProgress(p);
 
-        // Sequence:
-        // 0.00 - 0.38: Green paddy field develops, grains form, matures into glorious Golden Paddy with wind waves
-        // 0.38 - 0.60: Camera glides through swaying golden crop, cinematic wind climax
-        // 0.60 - 1.00: Smooth transition revealing CROPCAST Application Interface and Top Navigation
-
         if (p < 0.38) {
           cropState.maturity = p / 0.38;
-          cropState.windStrength = 1 + (p / 0.38) * 0.6;
+          cropState.windStrength = 1 + (p / 0.38) * 0.65;
           cropState.cameraElevation = 0;
           cropState.uiReveal = 0;
-        } else if (p < 0.6) {
-          const sub = (p - 0.38) / 0.22;
+        } else if (p < 0.58) {
+          const sub = (p - 0.38) / 0.2;
           cropState.maturity = 1;
-          cropState.windStrength = 1.6;
-          cropState.cameraElevation = sub * 0.8;
-          cropState.uiReveal = sub * 0.3;
+          cropState.windStrength = 1.65;
+          cropState.cameraElevation = sub * 0.85;
+          cropState.uiReveal = sub * 0.35;
         } else {
-          const sub = (p - 0.6) / 0.4;
+          const sub = (p - 0.58) / 0.42;
           cropState.maturity = 1;
-          cropState.windStrength = 1.6 - sub * 0.5;
-          cropState.cameraElevation = 0.8 + sub * 0.6;
-          cropState.uiReveal = 0.3 + sub * 0.7;
+          cropState.windStrength = 1.65 - sub * 0.5;
+          cropState.cameraElevation = 0.85 + sub * 0.6;
+          cropState.uiReveal = 0.35 + sub * 0.65;
         }
 
-        // Reveal App UI Container
+        // Hardware-Accelerated Smooth UI Slide-in (Zero Lag)
         if (appUIRef.current) {
-          if (p < 0.45) {
+          if (p < 0.42) {
             appUIRef.current.style.opacity = '0';
             appUIRef.current.style.pointerEvents = 'none';
-            appUIRef.current.style.transform = 'translateY(80px)';
+            appUIRef.current.style.transform = 'translate3d(0, 50px, 0)';
           } else {
-            const uiProg = Math.min(1, (p - 0.45) / 0.35);
+            const uiProg = Math.min(1, (p - 0.42) / 0.32);
             appUIRef.current.style.opacity = uiProg.toString();
             appUIRef.current.style.pointerEvents = uiProg > 0.6 ? 'auto' : 'none';
-            appUIRef.current.style.transform = `translateY(${Math.round((1 - uiProg) * 60)}px)`;
+            appUIRef.current.style.transform = `translate3d(0, ${Math.round((1 - uiProg) * 40)}px, 0)`;
           }
         }
       },
@@ -412,17 +394,17 @@ export const CropPredictionSection: React.FC<CropPredictionSectionProps> = ({
       ref={containerRef}
       className="relative w-full min-h-screen overflow-hidden bg-[#05070a] select-none"
     >
-      <canvas ref={canvasRef} className="absolute inset-0 w-full h-full block" />
+      <canvas ref={canvasRef} className="absolute inset-0 w-full h-full block will-change-transform" />
 
       {/* ========================================================================= */}
-      {/* FINAL APPLICATION INTERFACE & HEADER (Revealed only in Section 5) */}
+      {/* FINAL APPLICATION INTERFACE & HEADER (Revealed smoothly in Section 5) */}
       {/* ========================================================================= */}
       <div
         ref={appUIRef}
-        className="relative z-20 w-full min-h-screen flex flex-col justify-start text-slate-100 opacity-0 transition-all duration-300 pointer-events-none pb-16"
+        className="relative z-20 w-full min-h-screen flex flex-col justify-start text-slate-100 opacity-0 transition-opacity duration-200 pointer-events-none pb-16 will-change-transform"
       >
         {/* ========================================== */}
-        {/* 1. TOP NAVIGATION HEADER (Exclusive to Section 5) */}
+        {/* 1. TOP NAVIGATION HEADER */}
         {/* ========================================== */}
         <header className="sticky top-0 w-full z-40 glass-panel border-b border-white/10 px-6 py-4 flex items-center justify-between shadow-2xl">
           {/* Brand Logo */}
@@ -535,12 +517,10 @@ export const CropPredictionSection: React.FC<CropPredictionSectionProps> = ({
 
           {/* Core 2-Column Grid: Left Inputs, Right Visual Yield Results */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            {/* ==================================================== */}
-            {/* LEFT COLUMN (Inputs / Sliders / Parameters) - 5 Cols */}
-            {/* ==================================================== */}
+            {/* LEFT COLUMN - 5 Cols */}
             <div className="lg:col-span-5 space-y-6">
               <form onSubmit={handlePredictSubmit} className="space-y-6">
-                {/* 1. Target Crop & Region Card */}
+                {/* Target Crop Card */}
                 <div className="glass-card rounded-2xl p-5 space-y-4 border border-white/10">
                   <div className="flex items-center justify-between border-b border-white/5 pb-3">
                     <div className="flex items-center gap-2 text-amber-400 font-semibold text-sm">
@@ -567,7 +547,7 @@ export const CropPredictionSection: React.FC<CropPredictionSectionProps> = ({
                   </div>
                 </div>
 
-                {/* 2. Satellite Spectral Indices Card */}
+                {/* Satellite Spectral Indices Card */}
                 <div className="glass-card rounded-2xl p-5 space-y-4 border border-white/10">
                   <div className="flex items-center justify-between border-b border-white/5 pb-3">
                     <div className="flex items-center gap-2 text-cyan-400 font-semibold text-sm">
@@ -579,7 +559,7 @@ export const CropPredictionSection: React.FC<CropPredictionSectionProps> = ({
                     </span>
                   </div>
 
-                  {/* NDVI Slider */}
+                  {/* NDVI */}
                   <div className="space-y-1.5">
                     <div className="flex justify-between text-xs font-mono">
                       <span className="text-slate-300">NDVI (Normalized Veg Index)</span>
@@ -600,7 +580,7 @@ export const CropPredictionSection: React.FC<CropPredictionSectionProps> = ({
                     </div>
                   </div>
 
-                  {/* EVI Slider */}
+                  {/* EVI */}
                   <div className="space-y-1.5">
                     <div className="flex justify-between text-xs font-mono">
                       <span className="text-slate-300">EVI (Enhanced Vegetation)</span>
@@ -635,7 +615,7 @@ export const CropPredictionSection: React.FC<CropPredictionSectionProps> = ({
                   </div>
                 </div>
 
-                {/* 3. Weather & Climate Dynamics Card */}
+                {/* Weather & Climate */}
                 <div className="glass-card rounded-2xl p-5 space-y-4 border border-white/10">
                   <div className="flex items-center justify-between border-b border-white/5 pb-3">
                     <div className="flex items-center gap-2 text-blue-400 font-semibold text-sm">
@@ -646,7 +626,6 @@ export const CropPredictionSection: React.FC<CropPredictionSectionProps> = ({
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
-                    {/* Rainfall */}
                     <div className="space-y-1">
                       <label className="text-[11px] text-slate-400 font-mono flex items-center gap-1">
                         <Droplets className="w-3 h-3 text-blue-400" />
@@ -660,7 +639,6 @@ export const CropPredictionSection: React.FC<CropPredictionSectionProps> = ({
                       />
                     </div>
 
-                    {/* Temperature */}
                     <div className="space-y-1">
                       <label className="text-[11px] text-slate-400 font-mono flex items-center gap-1">
                         <Sun className="w-3 h-3 text-amber-400" />
@@ -676,14 +654,13 @@ export const CropPredictionSection: React.FC<CropPredictionSectionProps> = ({
                     </div>
                   </div>
 
-                  {/* Humidity info badge */}
                   <div className="flex justify-between items-center text-xs font-mono text-slate-400 pt-1">
                     <span>Relative Humidity:</span>
                     <span className="text-slate-200 font-semibold">{humidity}%</span>
                   </div>
                 </div>
 
-                {/* 4. Soil & Historical Baseline */}
+                {/* Soil & Historical */}
                 <div className="glass-card rounded-2xl p-5 space-y-4 border border-white/10">
                   <div className="flex items-center justify-between border-b border-white/5 pb-3">
                     <div className="flex items-center gap-2 text-amber-400 font-semibold text-sm">
@@ -728,7 +705,6 @@ export const CropPredictionSection: React.FC<CropPredictionSectionProps> = ({
                   </div>
                 </div>
 
-                {/* Submit AI Prediction Button */}
                 <button
                   type="submit"
                   disabled={isPredicting}
@@ -749,11 +725,9 @@ export const CropPredictionSection: React.FC<CropPredictionSectionProps> = ({
               </form>
             </div>
 
-            {/* ==================================================== */}
-            {/* RIGHT COLUMN (Yield Results & Visualizations) - 7 Cols */}
-            {/* ==================================================== */}
+            {/* RIGHT COLUMN - 7 Cols */}
             <div className="lg:col-span-7 space-y-6">
-              {/* Main Prominent Predicted Yield Hero Card */}
+              {/* Predicted Yield Hero Card */}
               <div className="glass-card rounded-2xl p-6 border-2 border-amber-500/40 relative overflow-hidden glow-gold">
                 <div className="absolute -right-12 -top-12 w-48 h-48 rounded-full bg-amber-500/10 blur-3xl pointer-events-none" />
                 <div className="absolute -left-12 -bottom-12 w-48 h-48 rounded-full bg-emerald-500/10 blur-3xl pointer-events-none" />
@@ -809,7 +783,7 @@ export const CropPredictionSection: React.FC<CropPredictionSectionProps> = ({
                   </div>
                 </div>
 
-                {/* Secondary Key Indicators Bar */}
+                {/* Secondary Indicators */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4 border-t border-white/10">
                   <div className="bg-white/5 rounded-xl p-3">
                     <span className="text-[10px] font-mono text-slate-400 block">Canopy Vigour (NDVI)</span>
@@ -845,7 +819,7 @@ export const CropPredictionSection: React.FC<CropPredictionSectionProps> = ({
                 </div>
               </div>
 
-              {/* Multi-Year Yield Comparison Chart */}
+              {/* Multi-Year Chart */}
               <div className="glass-card rounded-2xl p-5 border border-white/10 space-y-4">
                 <div className="flex items-center justify-between border-b border-white/5 pb-3">
                   <div className="flex items-center gap-2 text-white font-semibold text-sm">
@@ -891,7 +865,7 @@ export const CropPredictionSection: React.FC<CropPredictionSectionProps> = ({
                 </div>
               </div>
 
-              {/* NDVI Phenological Growth Stage Timeline */}
+              {/* NDVI Phenological Timeline */}
               <div className="glass-card rounded-2xl p-5 border border-white/10 space-y-4">
                 <div className="flex items-center justify-between border-b border-white/5 pb-3">
                   <div className="flex items-center gap-2 text-white font-semibold text-sm">
@@ -931,7 +905,7 @@ export const CropPredictionSection: React.FC<CropPredictionSectionProps> = ({
                 </div>
               </div>
 
-              {/* AI Advisory & Precision Insights */}
+              {/* AI Advisory */}
               <div className="bg-gradient-to-r from-emerald-950/40 via-slate-900/60 to-amber-950/40 rounded-2xl p-5 border border-emerald-500/20 space-y-3">
                 <div className="flex items-center gap-2 text-emerald-400 text-xs font-mono font-bold uppercase tracking-wider">
                   <Sparkles className="w-4 h-4" />
